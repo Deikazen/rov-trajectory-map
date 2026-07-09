@@ -1,68 +1,68 @@
 # ROV Trajectory Map
 
-Aplikasi dashboard sederhana untuk memantau lintasan ROV secara real-time dari data telemetri MAVLink/Pixhawk.
+A simple dashboard application to monitor an ROV trajectory in real time using MAVLink/Pixhawk telemetry data.
 
-Frontend menampilkan peta top-down berbasis canvas, sementara backend FastAPI menyediakan data posisi melalui endpoint `/api/telemetry`.
+The frontend renders a top-down canvas map, while the FastAPI backend serves telemetry data through the `/api/telemetry` endpoint.
 
-## Fitur
+## Features
 
-- Menampilkan lintasan pergerakan ROV pada canvas
-- Menandai posisi saat ini dengan indikator panah
-- Menyimpan riwayat lintasan selama sesi berjalan
-- Menyediakan tombol **Replay Path** dan **Clear**
-- Menampilkan status koneksi backend (**ONLINE/OFFLINE**)
-- Auto-open browser saat server dijalankan
+- Display real-time ROV movement trajectory on a canvas
+- Show current position with an arrow indicator
+- Keep trajectory history during the active session
+- Provide **Replay Path** and **Clear** controls
+- Show backend connection status (**ONLINE/OFFLINE**)
+- Automatically open the dashboard in a browser on startup
 
-## Struktur Proyek
+## Project Structure
 
-- `main.py` — backend FastAPI + pembaca data MAVLink
-- `index.html` — tampilan dashboard frontend
-- `requirements.txt` — daftar dependency Python
+- `main.py` — FastAPI backend + MAVLink telemetry reader
+- `index.html` — frontend dashboard UI
+- `requirements.txt` — Python dependencies
 
-## Kebutuhan
+## Requirements
 
 - Python 3.6+
-- Access ke sumber telemetri MAVLink/Pixhawk
-- Koneksi UDP ke `127.0.0.1:14551`
+- Access to a MAVLink/Pixhawk telemetry source
+- UDP connection to `127.0.0.1:14551`
 
-## Instalasi
+## Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Jika memakai virtual environment, aktifkan dulu environment yang sudah ada lalu jalankan perintah di atas.
+If you use a virtual environment, activate it first, then run the command above.
 
-## Menjalankan Aplikasi
+## Running the Application
 
 ```bash
 python main.py
 ```
 
-Server akan berjalan di:
+The server runs at:
 
 - `http://localhost:8007`
 
-Saat startup, aplikasi juga mencoba membuka browser otomatis ke halaman dashboard.
+On startup, the app also attempts to open the dashboard in your browser automatically.
 
-## Alur Kerja
+## Workflow
 
-1. Backend membaca telemetri MAVLink dari Pixhawk.
-2. Data posisi disimpan ke state API.
-3. Frontend melakukan polling ke `/api/telemetry` setiap 100 ms.
-4. Canvas diperbarui untuk menggambar lintasan dan posisi terkini.
+1. The backend reads MAVLink telemetry from Pixhawk.
+2. Position and attitude data are stored in API state.
+3. The frontend polls `/api/telemetry` every 100 ms.
+4. The canvas is updated with the latest trajectory and current position.
 
-## Endpoint API
+## API Endpoints
 
 ### `GET /`
 
-Mengembalikan halaman dashboard `index.html`.
+Returns the `index.html` dashboard page.
 
 ### `GET /api/telemetry`
 
-Mengembalikan data telemetri dalam format JSON.
+Returns telemetry data in JSON format.
 
-Contoh respons:
+Example response:
 
 ```json
 {
@@ -75,16 +75,30 @@ Contoh respons:
 }
 ```
 
-## Konfigurasi Penting
+## Important Configuration
 
-- Port backend: `8007`
-- URL telemetry di frontend: `http://localhost:8007/api/telemetry`
-- Port MAVLink input: `127.0.0.1:14551`
-- Skala peta pada frontend: `12 x 12 meter`
+- Backend port: `8007`
+- Frontend telemetry URL: `http://localhost:8007/api/telemetry`
+- MAVLink input address: `127.0.0.1:14551`
+- Frontend map scale: `12 x 12 meters`
 
-## Catatan
+## Notes
 
-- Jika data tidak muncul, pastikan Pixhawk/MAVLink sudah aktif dan mengirim data ke port yang benar.
-- Jika browser tidak terbuka otomatis, buka manual `http://localhost:8007`.
-- File `index.html` harus berada di folder yang sama dengan `main.py`.
+- If telemetry data does not appear, ensure Pixhawk/MAVLink is active and sending data to the correct port.
+- If the browser does not open automatically, open `http://localhost:8007` manually.
+- `index.html` must be in the same directory as `main.py`.
 
+## Source
+
+- Repository: https://github.com/Deikazen/rov-trajectory-map
+
+## References
+
+- FastAPI documentation: https://fastapi.tiangolo.com/
+- Uvicorn documentation: https://www.uvicorn.org/
+- pymavlink (PyPI): https://pypi.org/project/pymavlink/
+- MAVLink official documentation: https://mavlink.io/en/
+
+## Author
+
+- Deikazen
