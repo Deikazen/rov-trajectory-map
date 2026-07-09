@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROV Trajectory Map Display</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen p-6 flex flex-col justify-center items-center">
+
+    <div
+        class="w-full max-w-3xl bg-gray-800 rounded-xl border border-gray-700 flex flex-col overflow-hidden shadow-2xl">
+
+        <div class="p-4 bg-gray-850 border-b border-gray-700 flex justify-between items-center">
+            <div class="flex flex-col">
+                <span class="text-sm font-bold tracking-wider text-gray-300 uppercase">Trajectory Map — Top-Down
+                    View</span>
+                <span class="text-xs text-gray-500">Live positioning tracking from Pixhawk</span>
+            </div>
+
+            <div class="flex items-center space-x-3 bg-gray-900 px-3 py-1.5 rounded-md border border-gray-700">
+                <span class="text-xs font-semibold text-gray-400">API Status:</span>
+                <div id="status-badge"
+                    class="px-2 py-0.5 text-[10px] font-bold rounded bg-red-500 text-white animate-pulse">
+                    OFFLINE
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6 bg-slate-900/40 flex justify-center items-center relative">
+            <canvas id="mapCanvas" width="600" height="380"
+                class="bg-[#f8fafc]/5 rounded-lg border border-gray-800 shadow-inner"></canvas>
+        </div>
+
+        <div class="p-4 bg-gray-850 border-t border-gray-700 flex justify-end space-x-3">
+            <button onclick="replayPath()"
+                class="px-4 py-1.5 text-sm font-semibold bg-white text-gray-800 rounded border border-gray-300 hover:bg-gray-100 transition shadow-sm">
+                Replay Path
+            </button>
+            <button onclick="clearPath()"
+                class="px-4 py-1.5 text-sm font-semibold bg-white text-gray-800 rounded border border-gray-300 hover:bg-gray-100 transition shadow-sm">
+                Clear
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Endpoint URL target FastAPI kamu (Port 8007)
+        const API_URL = 'http://localhost:8007/api/telemetry';
+
+        const MAP_MAX_X = 12.0;       // Skala batas area X (meter)
+        const MAP_MAX_Y = 12.0;       // Skala batas area Y (meter)
+
+        // State Array
+        let trajectoryPath = [];
+        let currentX = 0.0;
+        let currentY = 0.0;
+        let isReplaying = false;
+
+        // Elemen UI Badge
+        const statusBadge = document.getElementById('status-badge');
+
+        // Setup Canvas Context
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Fungsi Utama Menembak Endpoint API FastAPI
+        async function fetchTelemetry() {
+            if (isReplaying) return; // Hentikan live tracking sementara jika sedang simulasi replay
+
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error("Server Error");
+
+                const telemetry = await response.json();
+
+                // Update Status Badge jika sukses terhubung
+                statusBadge.textContent = "ONLINE";
+                statusBadge.className = "px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500 text-white shadow-[0_0_10px_#10b981]";
+
+                // Update Data Koordinat Map Trajectory dari API
+                currentX = telemetry.x;
+                currentY = telemetry.y;
+
+                // Masukkan ke history jika koordinatnya berubah (menghindari duplikasi data saat diam)
+                if (trajectoryPath.length === 0 ||
+                    trajectoryPath[trajectoryPath.length - 1].x !== currentX ||
+                    trajectoryPath[trajectoryPath.length - 1].y !== currentY) {
+                    trajectoryPath.push({ x: currentX, y: currentY });
+                }
+
+                // Render gambar peta lintasan
+                drawTrajectoryMap();
+
+            } catch (error) {
+                // Set status badge menjadi OFFLINE jika backend mati
+                statusBadge.textContent = "OFFLINE";
+                statusBadge.className = "px-2 py-0.5 text-[10px] font-bold rounded bg-red-500 text-white animate-pulse";
+                console.error("Gagal melakukan polling ke API FastAPI:", error);
+            }
+        }
+
+        // Fungsi Menggambar Grid & Lintasan pada Canvas
+        function drawTrajectoryMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const gridSpacing = 35;
+
+            // A. Gambar Grid Box Background
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < canvas.width; x += gridSpacing) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += gridSpacing) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+            }
+
+            // Converter meter ke Pixel koordinat kartesius (0,0 ada di kiri bawah)
+            function toPixel(xMetres, yMetres) {
+                const pxX = (xMetres / MAP_MAX_X) * canvas.width;
+                const pxY = canvas.height - ((yMetres / MAP_MAX_Y) * canvas.height);
+                return { x: pxX, y: pxY };
+            }
+
+            // B. Gambar Jalur Lintasan Track (Orange Line)
+            if (trajectoryPath.length > 1) {
+                ctx.beginPath();
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                const startPt = toPixel(trajectoryPath[0].x, trajectoryPath[0].y);
+                ctx.moveTo(startPt.x, startPt.y);
+
+                for (let i = 1; i < trajectoryPath.length; i++) {
+                    const pt = toPixel(trajectoryPath[i].x, trajectoryPath[i].y);
+                    ctx.lineTo(pt.x, pt.y);
+                }
+                ctx.stroke();
+            }
+
+            // C. Gambar Titik Mulai (Green Dot)
+            if (trajectoryPath.length > 0) {
+                const startPt = toPixel(trajectoryPath[0].x, trajectoryPath[0].y);
+                ctx.fillStyle = '#10b981';
+                ctx.beginPath();
+                ctx.arc(startPt.x, startPt.y, 6, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
+
+            // D. Gambar Indikator Posisi Sekarang (Blue Arrow Pointer)
+            const currentPt = toPixel(currentX, currentY);
+
+            // Teks Label Koordinat real-time
+            ctx.fillStyle = 'rgba(156, 163, 175, 0.9)';
+            ctx.font = '11px sans-serif';
+            ctx.fillText(`X: ${currentX.toFixed(1)} Y: ${currentY.toFixed(1)}`, currentPt.x + 12, currentPt.y + 4);
+
+            // Membuat Bentuk Segitiga Panah Navigasi Biru
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.moveTo(currentPt.x, currentPt.y - 7);
+            ctx.lineTo(currentPt.x - 5, currentPt.y + 5);
+            ctx.lineTo(currentPt.x + 5, currentPt.y + 5);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Fungsi Tombol Clear Lintasan
+        function clearPath() {
+            trajectoryPath = [];
+            currentX = 0.0;
+            currentY = 0.0;
+            drawTrajectoryMap();
+            console.log("Trajectory cleared.");
+        }
+
+        // Fungsi Tombol Animasi Replay Path
+        function replayPath() {
+            if (trajectoryPath.length === 0 || isReplaying) return;
+
+            isReplaying = true;
+            const savedPath = [...trajectoryPath];
+            trajectoryPath = [];
+            let i = 0;
+
+            const timer = setInterval(() => {
+                if (i >= savedPath.length) {
+                    clearInterval(timer);
+                    isReplaying = false; // Kembalikan kontrol ke live polling API
+                    return;
+                }
+                currentX = savedPath[i].x;
+                currentY = savedPath[i].y;
+                trajectoryPath.push(savedPath[i]);
+                drawTrajectoryMap();
+                i++;
+            }, 70);
+        }
+
+        // Gambar map kosong di awal
+        drawTrajectoryMap();
+
+        // Lakukan pemanggilan API otomatis (Polling) ke port 8007 setiap 100ms sekali
+        setInterval(fetchTelemetry, 100);
+    </script>
+</body>
+
+</html>
