@@ -6,10 +6,11 @@ The frontend renders a top-down canvas map, while the FastAPI backend serves tel
 
 ## Features
 
-- Display real-time ROV movement trajectory on a canvas
-- Show current position with an arrow indicator
-- Keep trajectory history during the active session
-- Provide **Replay Path** and **Clear** controls
+- Display real-time ROV depth trend on a canvas (forward scrolling)
+- Show current depth in centimeters (0-200 cm)
+- Keep recent depth history during the active session
+- Provide **Clear** control
+- Toggle source mode between **Real Data** and **Dummy Data**
 - Show backend connection status (**ONLINE/OFFLINE**)
 - Automatically open the dashboard in a browser on startup
 
