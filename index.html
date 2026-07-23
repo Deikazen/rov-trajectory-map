@@ -20,39 +20,51 @@
 
 <body class="bg-gray-900 text-gray-100 font-sans w-full h-full p-0">
 
-    <div
-        class="w-full h-full bg-gray-800 border border-gray-700 flex flex-col overflow-hidden shadow-2xl">
+    <!--
+      HACK TAILWIND CDN:
+      Div ini disembunyikan, fungsinya cuma buat mancing compiler Tailwind CDN
+      biar nge-generate class warna yang dipanggil lewat Javascript.
+    -->
+    <div class="hidden bg-emerald-500 border-emerald-400 bg-sky-500 border-sky-400 bg-amber-500 bg-red-600 shadow-[0_0_10px_#10b981] shadow-[0_0_10px_#0ea5e9]"></div>
 
-        <div class="p-4 bg-gray-850 border-b border-gray-700 flex justify-between items-center">
+    <div class="w-full h-full bg-gray-800 border border-gray-700 flex flex-col overflow-hidden shadow-2xl">
+
+        <!-- Top Header Bar -->
+        <div class="p-4 bg-gray-850 border-b border-gray-700 flex justify-between items-center" style="background-color: #1a222c;">
             <div class="flex flex-col">
-                <span class="text-sm font-bold tracking-wider text-gray-300 uppercase">Depth Graph — Forward
-                    Scrolling</span>
-                <span class="text-xs text-gray-500">Depth trend from water pressure (cm, max 200)</span>
+                <span class="text-sm font-bold tracking-wider text-gray-300 uppercase">
+                    Depth Graph — Forward Scrolling
+                </span>
+                <span class="text-xs text-gray-500">
+                    ROV depth monitoring from MS5837 pressure sensor (cm, max 200)
+                </span>
             </div>
 
             <div class="flex items-center space-x-3 bg-gray-900 px-3 py-1.5 rounded-md border border-gray-700">
                 <span class="text-xs font-semibold text-gray-400">Data Status:</span>
                 <div id="status-badge"
                     class="px-2 py-0.5 text-[10px] font-bold rounded bg-red-500 text-white animate-pulse">
-                    OFFLINE
+                    CONNECTING...
                 </div>
             </div>
         </div>
 
+        <!-- Canvas Container -->
         <div id="mapWrapper" class="flex-1 p-3 bg-slate-900/40 relative min-h-0">
             <canvas id="mapCanvas"
                 class="w-full h-full bg-[#f8fafc]/5 rounded-lg border border-gray-800 shadow-inner"></canvas>
         </div>
 
-        <div class="p-4 bg-gray-850 border-t border-gray-700 flex flex-wrap justify-between gap-3">
+        <!-- Bottom Controls Bar -->
+        <div class="p-4 border-t border-gray-700 flex flex-wrap justify-between gap-3" style="background-color: #1a222c;">
             <div class="flex items-center gap-2">
                 <span class="text-xs font-semibold text-gray-400">Mode:</span>
                 <button id="real-mode-btn" onclick="setDataMode('real')"
-                    class="px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-emerald-500 text-white border-emerald-400">
+                    class="px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-white text-gray-800 border-gray-300 hover:bg-gray-100">
                     Real Data
                 </button>
                 <button id="dummy-mode-btn" onclick="setDataMode('dummy')"
-                    class="px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-white text-gray-800 border-gray-300 hover:bg-gray-100">
+                    class="px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-sky-500 text-white border-sky-400">
                     Dummy Data
                 </button>
             </div>
@@ -60,27 +72,24 @@
             <div class="flex items-center space-x-3">
                 <button onclick="clearPath()"
                     class="px-4 py-1.5 text-sm font-semibold bg-white text-gray-800 rounded border border-gray-300 hover:bg-gray-100 transition shadow-sm">
-                    Clear
+                    Clear Graph
                 </button>
             </div>
         </div>
     </div>
 
     <script>
-        const API_URL = `${window.location.origin}/api/telemetry`;
+        const API_TELEMETRY = `${window.location.origin}/api/telemetry`;
+        const API_SOURCE = `${window.location.origin}/api/source`;
 
         const MAX_DEPTH_CM = 200;
         const MAX_POINTS = 100;
-        const PRESSURE_BASE_KPA = 101.325;
-        const WATER_DENSITY = 997;
-        const GRAVITY = 9.80665;
 
         let depthSeries = [];
         let currentDepthCm = 0;
-        let dataMode = 'real';
-        let dummyTick = 0;
+        let dataMode = 'dummy'; // Default sesuai backend
 
-        // Elemen UI Badge
+        // UI Elements
         const statusBadge = document.getElementById('status-badge');
         const realModeBtn = document.getElementById('real-mode-btn');
         const dummyModeBtn = document.getElementById('dummy-mode-btn');
@@ -98,26 +107,33 @@
             drawTrajectoryMap();
         }
 
-        function updateStatusBadge(mode) {
-            if (mode === 'real-online') {
-                statusBadge.textContent = "ONLINE";
+        // Update tampilan badge status
+        function updateStatusBadge(status) {
+            if (status === 'real-online') {
+                statusBadge.textContent = "ONLINE (MAVLINK)";
                 statusBadge.className = "px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500 text-white shadow-[0_0_10px_#10b981]";
-                return;
+            } else if (status === 'real-offline') {
+                statusBadge.textContent = "NO MAVLINK";
+                statusBadge.className = "px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500 text-white animate-pulse";
+            } else if (status === 'dummy') {
+                statusBadge.textContent = "DUMMY MODE";
+                statusBadge.className = "px-2 py-0.5 text-[10px] font-bold rounded bg-sky-500 text-white shadow-[0_0_10px_#0ea5e9]";
+            } else if (status === 'server-offline') {
+                statusBadge.textContent = "SERVER DISCONNECTED";
+                statusBadge.className = "px-2 py-0.5 text-[10px] font-bold rounded bg-red-600 text-white animate-pulse";
             }
-            if (mode === 'real-offline') {
-                statusBadge.textContent = "OFFLINE";
-                statusBadge.className = "px-2 py-0.5 text-[10px] font-bold rounded bg-red-500 text-white animate-pulse";
-                return;
-            }
-            statusBadge.textContent = "DUMMY";
-            statusBadge.className = "px-2 py-0.5 text-[10px] font-bold rounded bg-sky-500 text-white shadow-[0_0_10px_#0ea5e9]";
         }
 
-        function pressureKpaToDepthCm(pressureKpa) {
-            const gaugePressurePa = Math.max(0, (pressureKpa - PRESSURE_BASE_KPA) * 1000);
-            const depthMeters = gaugePressurePa / (WATER_DENSITY * GRAVITY);
-            const depthCm = depthMeters * 100;
-            return Math.max(0, Math.min(MAX_DEPTH_CM, depthCm));
+        // Update style tombol mode
+        function updateButtonStyles(mode) {
+            dataMode = mode;
+            realModeBtn.className = mode === 'real'
+                ? "px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-emerald-500 text-white border-emerald-400"
+                : "px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-white text-gray-800 border-gray-300 hover:bg-gray-100";
+
+            dummyModeBtn.className = mode === 'dummy'
+                ? "px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-sky-500 text-white border-sky-400"
+                : "px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-white text-gray-800 border-gray-300 hover:bg-gray-100";
         }
 
         function pushDepthPoint(depthCm) {
@@ -129,85 +145,48 @@
             }
         }
 
-        function setDataMode(mode) {
-            if (mode === dataMode) return;
-            dataMode = mode;
+        async function setDataMode(mode) {
+            try {
+                const response = await fetch(API_SOURCE, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ source: mode })
+                });
+                if (!response.ok) throw new Error("Gagal mengubah mode data");
 
-            realModeBtn.className = mode === 'real'
-                ? "px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-emerald-500 text-white border-emerald-400"
-                : "px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-white text-gray-800 border-gray-300 hover:bg-gray-100";
-            dummyModeBtn.className = mode === 'dummy'
-                ? "px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-sky-500 text-white border-sky-400"
-                : "px-3 py-1.5 text-sm font-semibold rounded border transition shadow-sm bg-white text-gray-800 border-gray-300 hover:bg-gray-100";
-
-            if (mode === 'dummy') {
-                updateStatusBadge('dummy');
-            } else {
-                updateStatusBadge('real-offline');
+                const result = await response.json();
+                updateButtonStyles(result.source);
+            } catch (error) {
+                console.error("Gagal mengirim request ganti mode:", error);
             }
-        }
-
-        function generateDummyTelemetry() {
-            dummyTick += 0.07;
-            const depthCm =
-                95 +
-                (42 * Math.sin(dummyTick * 0.9)) +
-                (18 * Math.sin(dummyTick * 2.2)) +
-                (8 * Math.sin(dummyTick * 4.1));
-
-            const safeDepthCm = Math.max(5, Math.min(195, depthCm));
-            const pressureKpa = PRESSURE_BASE_KPA + ((safeDepthCm / 100) * WATER_DENSITY * GRAVITY) / 1000;
-
-            return {
-                pressure_kpa: pressureKpa,
-                depth_cm: safeDepthCm
-            };
         }
 
         async function fetchTelemetry() {
             try {
-                const response = await fetch(API_URL);
+                const response = await fetch(API_TELEMETRY);
                 if (!response.ok) throw new Error("Server Error");
 
                 const telemetry = await response.json();
 
-                // Update Status Badge jika sukses terhubung
-                updateStatusBadge('real-online');
-
-                // Prioritas depth langsung dari API, fallback dari tekanan, lalu fallback dari nilai depth meter lama.
-                let depthCm = null;
-                if (typeof telemetry.depth_cm === 'number') {
-                    depthCm = telemetry.depth_cm;
-                } else if (typeof telemetry.pressure_kpa === 'number') {
-                    depthCm = pressureKpaToDepthCm(telemetry.pressure_kpa);
-                } else if (typeof telemetry.depth === 'number') {
-                    depthCm = telemetry.depth * 100;
-                } else {
-                    depthCm = 0;
+                if (telemetry.source !== dataMode) {
+                    updateButtonStyles(telemetry.source);
                 }
 
+                if (telemetry.source === 'dummy') {
+                    updateStatusBadge('dummy');
+                } else if (telemetry.mavlink_connected) {
+                    updateStatusBadge('real-online');
+                } else {
+                    updateStatusBadge('real-offline');
+                }
+
+                const depthCm = telemetry.depth_cm ?? (telemetry.depth * 100) ?? 0;
                 pushDepthPoint(depthCm);
                 drawTrajectoryMap();
 
             } catch (error) {
-                updateStatusBadge('real-offline');
-                console.error("Gagal melakukan polling ke API FastAPI:", error);
+                updateStatusBadge('server-offline');
             }
-        }
-
-        function fetchDummyTelemetry() {
-            const telemetry = generateDummyTelemetry();
-            updateStatusBadge('dummy');
-            pushDepthPoint(pressureKpaToDepthCm(telemetry.pressure_kpa));
-            drawTrajectoryMap();
-        }
-
-        function pollTelemetryByMode() {
-            if (dataMode === 'dummy') {
-                fetchDummyTelemetry();
-                return;
-            }
-            fetchTelemetry();
         }
 
         function drawTrajectoryMap() {
@@ -230,7 +209,6 @@
                 ctx.stroke();
             }
 
-            // Label sumbu kedalaman (cm)
             ctx.fillStyle = 'rgba(156, 163, 175, 0.9)';
             ctx.font = '11px sans-serif';
             for (let cm = 0; cm <= MAX_DEPTH_CM; cm += 25) {
@@ -238,7 +216,6 @@
                 ctx.fillText(`${cm} cm`, 8, Math.max(12, y - 4));
             }
 
-            // Garis kedalaman (time-series maju ke kanan, data lama bergeser keluar di kiri)
             if (depthSeries.length > 1) {
                 ctx.beginPath();
                 ctx.strokeStyle = '#f59e0b';
@@ -258,7 +235,6 @@
                 ctx.stroke();
             }
 
-            // Titik data terbaru
             if (depthSeries.length > 0) {
                 const x = ((depthSeries.length - 1) / (MAX_POINTS - 1)) * canvas.width;
                 const y = canvas.height - ((currentDepthCm / MAX_DEPTH_CM) * canvas.height);
@@ -284,13 +260,13 @@
             depthSeries = [];
             currentDepthCm = 0;
             drawTrajectoryMap();
-            console.log("Depth series cleared.");
         }
 
         resizeCanvasToContainer();
         window.addEventListener('resize', resizeCanvasToContainer);
 
-        setInterval(pollTelemetryByMode, 100);
+        // Polling telemetri setiap 100ms
+        setInterval(fetchTelemetry, 100);
     </script>
 </body>
 
